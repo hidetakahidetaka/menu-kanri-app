@@ -1,4 +1,4 @@
-{
+{{
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
@@ -20,6 +20,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts"],
+  "include": ["api", "components", "services", "utils", "App.tsx", "index.tsx", "types.ts", "vite.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

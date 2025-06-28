@@ -10,37 +10,36 @@ import LoadingSpinner from './components/LoadingSpinner';
 import ErrorMessage from './components/ErrorMessage';
 
 const App: React.FC = () => {
-  const [uploadedImageFile, setUploadedImageFile] = useState<File | null>(null);
-  const [uploadedImagePreview, setUploadedImagePreview] = useState<string | null>(null);
+  const [uploadedImageFiles, setUploadedImageFiles] = useState<File[]>([]);
+  const [uploadedImagePreviews, setUploadedImagePreviews] = useState<string[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
 
   useEffect(() => {
-    // Clean up object URL when component unmounts or image changes
+    // Clean up all object URLs when component unmounts or images change
     return () => {
-      if (uploadedImagePreview) {
-        URL.revokeObjectURL(uploadedImagePreview);
-      }
+      uploadedImagePreviews.forEach(URL.revokeObjectURL);
     };
-  }, [uploadedImagePreview]);
+  }, [uploadedImagePreviews]);
 
   const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (uploadedImagePreview) {
-        URL.revokeObjectURL(uploadedImagePreview);
-      }
-      setUploadedImageFile(file);
-      setUploadedImagePreview(URL.createObjectURL(file));
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      // Clean up old previews before creating new ones
+      uploadedImagePreviews.forEach(URL.revokeObjectURL);
+      
+      setUploadedImageFiles(files);
+      const newPreviews = files.map(file => URL.createObjectURL(file));
+      setUploadedImagePreviews(newPreviews);
       setOrderItems([]);
       setError(null);
     }
-  }, [uploadedImagePreview]);
+  }, [uploadedImagePreviews]);
 
-  const processImage = useCallback(async () => {
-    if (!uploadedImageFile) {
+  const processImages = useCallback(async () => {
+    if (uploadedImageFiles.length === 0) {
       setError("まず画像ファイルを選択してください。");
       return;
     }
@@ -50,15 +49,30 @@ const App: React.FC = () => {
     setOrderItems([]);
 
     try {
-      const base64ImageData = await fileToBase64(uploadedImageFile);
-      const extractedRawItems: RawMenuItem[] = await extractMenuItemsFromImage(base64ImageData, uploadedImageFile.type);
+      const allExtractedItems = await Promise.all(
+        uploadedImageFiles.map(async (file) => {
+          const base64ImageData = await fileToBase64(file);
+          return extractMenuItemsFromImage(base64ImageData, file.type);
+        })
+      );
+
+      // Flatten the array of arrays and deduplicate items by name
+      const flattenedItems = allExtractedItems.flat();
+      const uniqueItemsMap = new Map<string, RawMenuItem>();
+      flattenedItems.forEach(item => {
+        if (!uniqueItemsMap.has(item.name)) {
+          uniqueItemsMap.set(item.name, item);
+        }
+      });
+      const uniqueRawItems = Array.from(uniqueItemsMap.values());
       
-      const newOrderItems: OrderItem[] = extractedRawItems.map((item) => ({
+      const newOrderItems: OrderItem[] = uniqueRawItems.map((item) => ({
         ...item,
         id: crypto.randomUUID(), // Generate unique ID
         quantityOrdered: 0,
         quantityReceived: 0,
       }));
+
       setOrderItems(newOrderItems);
       if (newOrderItems.length === 0) {
         setError("メニューアイテムが抽出されませんでした。別の画像を試すか、画像の品質を確認してください。");
@@ -69,7 +83,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [uploadedImageFile]);
+  }, [uploadedImageFiles]);
 
   const handleOrderItemChange = useCallback((id: string, field: 'quantityOrdered' | 'quantityReceived', value: string) => {
     setOrderItems((prevItems) =>
@@ -87,11 +101,9 @@ const App: React.FC = () => {
   }, []);
   
   const clearAll = useCallback(() => {
-    if (uploadedImagePreview) {
-      URL.revokeObjectURL(uploadedImagePreview);
-    }
-    setUploadedImageFile(null);
-    setUploadedImagePreview(null);
+    uploadedImagePreviews.forEach(URL.revokeObjectURL);
+    setUploadedImageFiles([]);
+    setUploadedImagePreviews([]);
     setOrderItems([]);
     setError(null);
     setIsLoading(false);
@@ -100,7 +112,7 @@ const App: React.FC = () => {
     if (fileInput) {
         fileInput.value = '';
     }
-  }, [uploadedImagePreview]);
+  }, [uploadedImagePreviews]);
 
   const requestSort = useCallback((key: SortableKey) => {
     let direction: SortDirection = 'ascending';
@@ -149,22 +161,22 @@ const App: React.FC = () => {
 
       <ImageUploader 
         onImageUpload={handleImageUpload} 
-        imagePreviewUrl={uploadedImagePreview}
+        imagePreviewUrls={uploadedImagePreviews}
         processing={isLoading}
       />
 
-      {uploadedImageFile && (
+      {uploadedImageFiles.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-center gap-4 my-6">
             <button
-                onClick={processImage}
-                disabled={isLoading || !uploadedImageFile}
+                onClick={processImages}
+                disabled={isLoading || uploadedImageFiles.length === 0}
                 className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50"
             >
                 {isLoading ? '処理中...' : 'メニューを処理'}
             </button>
             <button
                 onClick={clearAll}
-                disabled={isLoading && !uploadedImageFile && orderItems.length === 0}
+                disabled={isLoading && uploadedImageFiles.length === 0 && orderItems.length === 0}
                 className="w-full sm:w-auto px-8 py-3 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 disabled:bg-gray-300 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50"
             >
                 クリア
@@ -192,7 +204,7 @@ const App: React.FC = () => {
         </>
       )}
       
-      {!isLoading && !uploadedImageFile && orderItems.length === 0 && !error && (
+      {!isLoading && uploadedImageFiles.length === 0 && orderItems.length === 0 && !error && (
         <div className="text-center p-10 bg-white rounded-xl shadow-lg mt-8">
             <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
