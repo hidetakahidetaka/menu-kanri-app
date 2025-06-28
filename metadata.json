@@ -1,0 +1,8 @@
+{
+  "name": "Menu Order Extractor",
+  "description": "Upload a restaurant menu image to extract items and prices, then manage orders and calculate totals. Images are processed locally and sent to Gemini API for extraction. No images are stored.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "prompt": ""
+}

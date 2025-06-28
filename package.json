@@ -1,0 +1,10 @@
+
+{
+  "name": "gemini-menu-extractor",
+  "version": "1.0.0",
+  "description": "A web application to extract items from a menu image using the Gemini API.",
+  "private": true,
+  "dependencies": {
+    "@google/genai": "^1.6.0"
+  }
+}
